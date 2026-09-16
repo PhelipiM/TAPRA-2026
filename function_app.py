@@ -1,6 +1,5 @@
 import logging
 import azure.functions as func
-import requests
 
 app = func.FunctionApp()
 
