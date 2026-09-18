@@ -1,7 +1,7 @@
 import logging
+import os
 import azure.functions as func
 import requests
-import os
 
 app = func.FunctionApp()
 
@@ -24,7 +24,7 @@ def http_trigger(req: func.HttpRequest) -> func.HttpResponse:
         except ValueError:
             pass
         else:
-            name = req_body.get('name', 'desconhecido')
+            name = req_body.get('name')
 
     if name:
         return func.HttpResponse(f"Hello, {name}. This HTTP triggered function executed successfully.")
@@ -34,22 +34,22 @@ def http_trigger(req: func.HttpRequest) -> func.HttpResponse:
              status_code=200
         )
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False,
+              use_monitor=False)
 def timer_trigger_http(myTimer: func.TimerRequest) -> None:
-    
+
     logging.info('Iniciando a time trigger http')
 
     host = os.environ.get("WEBSITE_HOSTNAME")
-    url =f"https://{host}/api/http_trigger"
+    url = f"https://{host}/api/http_trigger"
 
     payload = {'name': 'vitor'}
-    headers= {"Content-Type": "application/json"}
 
     try:
-        response = requests.post(url, json=payload, headers=headers )
-
-        logging.info(f'response {str(response)}')
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        logging.info(f'Timer trigger chamou a HTTP function. Status: {response.status_code} | Retorno: {response.text}')
     except Exception as e:
         logging.error(f"Falha ao tentar se comunicar com a função interna: {str(e)}")
 
