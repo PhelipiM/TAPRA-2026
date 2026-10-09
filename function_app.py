@@ -57,7 +57,7 @@ def timer_trigger_http(myTimer: func.TimerRequest) -> None:
 
 @app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
               use_monitor=False) 
-def extract_chamado(myTimer: func.TimerRequest) -> None:
+def extract_ch amado(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
     host_sql = os.getenv("HOST")
