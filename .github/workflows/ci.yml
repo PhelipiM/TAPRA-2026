@@ -9,9 +9,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Check code formatting and linting
+        run: |
+          ruff format --check .
+          ruff check --select I .
+          ruff check .
+
       - run: python3 --version
       - run: python3 -m py_compile function_app.py
-
   
   deploy:
     needs: validar
