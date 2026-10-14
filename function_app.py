@@ -7,24 +7,27 @@ import pyodbc
 
 app = func.FunctionApp()
 
-@app.timer_trigger(schedule="0 */3 * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 */3 * * * *",
+    arg_name="myTimer",
+    run_on_startup=False,
+    use_monitor=False,
+)
 def timer_trigger_taprafunc1(myTimer: func.TimerRequest) -> None:
     if myTimer.past_due:
-        logging.info('Eita, demorou demais!')
+        logging.info("Eita, demorou demais!")
 
-    logging.info('Aqui é o timer trigger, rodando a cada 3 minutos!')
+    logging.info("Aqui é o timer trigger, rodando a cada 3 minutos!")
+
 
 @app.route(route="http_trigger", auth_level=func.AuthLevel.ANONYMOUS)
 def http_trigger(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+    logging.info("Python HTTP trigger function processed a request.")
 
-    name = req.params.get('name')
+    name = req.params.get("name")
     if not name:
-        return func.HttpResponse(
-            "Informe o parametro name na URL.",
-            status_code=400
-        )
+        return func.HttpResponse("Informe o parametro name na URL.", status_code=400)
 
     logging.info(f"Parametro recebido: {name}")
 
@@ -33,30 +36,37 @@ def http_trigger(req: func.HttpRequest) -> func.HttpResponse:
     )
 
 
-@app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False)
+@app.timer_trigger(
+    schedule="0 */5 * * * *",
+    arg_name="myTimer",
+    run_on_startup=False,
+    use_monitor=False,
+)
 def timer_trigger_http(myTimer: func.TimerRequest) -> None:
 
-    logging.info('Iniciando a time trigger http')
+    logging.info("Iniciando a time trigger http")
 
     host = os.environ.get("WEBSITE_HOSTNAME")
     url = f"https://{host}/api/http_trigger"
 
-    payload = {'name': 'nome exemplo'}
+    payload = {"name": "nome exemplo"}
 
     try:
         response = requests.get(url, params=payload, timeout=10)
         response.raise_for_status()
 
-        logging.info(f'Timer trigger chamou a HTTP function. Status: {response.status_code} | Retorno: {response.text}')
+        logging.info(
+            f"Timer trigger chamou a HTTP function. Status: {response.status_code} | Retorno: {response.text}"
+        )
     except Exception as e:
         logging.error(f"Falha ao tentar se comunicar com a função interna: {str(e)}")
 
-    logging.info('Finalizando a time trigger http')
+    logging.info("Finalizando a time trigger http")
 
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_chamado(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -65,7 +75,7 @@ def extract_chamado(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -77,7 +87,7 @@ def extract_chamado(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
@@ -89,17 +99,19 @@ def extract_chamado(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_analista(myTimer: func.TimerRequest) -> None:
-    
+
     driver = "{ODBC Driver 18 for SQL Server}"
     host_sql = os.getenv("HOST")
     database_sql = os.getenv("DATABASE")
@@ -116,7 +128,6 @@ def extract_analista(myTimer: func.TimerRequest) -> None:
         "TrustServerCertificate=no;"
         "Connection Timeout=30;"
     )
-
 
     try:
         conexao = pyodbc.connect(connection_string)
@@ -129,15 +140,17 @@ def extract_analista(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-            
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_categoria(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -146,7 +159,7 @@ def extract_categoria(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -158,11 +171,11 @@ def extract_categoria(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
-   
+
         query = "SELECT * FROM itsm.categoria"
 
         cursor.execute(query)
@@ -170,15 +183,17 @@ def extract_categoria(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_chamado_sla(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -187,7 +202,7 @@ def extract_chamado_sla(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -199,7 +214,7 @@ def extract_chamado_sla(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
@@ -211,56 +226,17 @@ def extract_chamado_sla(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
-def extract_chamado_sla(myTimer: func.TimerRequest) -> None:
 
-    driver = "{ODBC Driver 18 for SQL Server}"
-    host_sql = os.getenv("HOST")
-    database_sql = os.getenv("DATABASE")
-    user_sql = os.getenv("USER")
-    pass_sql = os.getenv("PASSWORD")
-
-    #string de conexao
-    connection_string = (
-        f"Driver={driver};"
-        f"Server=tcp:{host_sql},1433;"
-        f"Database={database_sql};"
-        f"Uid={user_sql};"
-        f"Pwd={pass_sql};"
-        "Encrypt=yes;"
-        "TrustServerCertificate=no;"
-        "Connection Timeout=30;"
-    )
-
-    #tentativa de conexao
-    try:
-        conexao = pyodbc.connect(connection_string)
-        cursor = conexao.cursor()
-
-        query = "SELECT * FROM itsm.chamado_sla"
-
-        cursor.execute(query)
-
-        retorno = cursor.fetchall()
-
-        logging.info(retorno)
-        
-        cursor.close()
-        conexao.close()
-        logging.info("conexao fechada")
-    except Exception as e:
-        print(f"Erro ao conectar: {e}")
-
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_chamado_status_historico(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -269,7 +245,7 @@ def extract_chamado_status_historico(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -281,7 +257,7 @@ def extract_chamado_status_historico(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
@@ -293,15 +269,17 @@ def extract_chamado_status_historico(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_cliente_organizacao(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -310,7 +288,7 @@ def extract_cliente_organizacao(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -322,7 +300,7 @@ def extract_cliente_organizacao(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
@@ -334,15 +312,17 @@ def extract_cliente_organizacao(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_csat_avaliacao(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -351,7 +331,7 @@ def extract_csat_avaliacao(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -363,13 +343,13 @@ def extract_csat_avaliacao(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
 
         logging.info("conectado com sucesso negão")
-        
+
         query = "SELECT * FROM itsm.csat_avaliacao"
 
         cursor.execute(query)
@@ -377,15 +357,17 @@ def extract_csat_avaliacao(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_fila(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -394,7 +376,7 @@ def extract_fila(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -406,13 +388,13 @@ def extract_fila(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
 
         logging.info("conectado com sucesso negão")
-        
+
         query = "SELECT * FROM itsm.fila"
 
         cursor.execute(query)
@@ -420,15 +402,17 @@ def extract_fila(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_sla(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -437,7 +421,7 @@ def extract_sla(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -449,13 +433,13 @@ def extract_sla(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
 
         logging.info("conectado com sucesso negão")
-        
+
         query = "SELECT * FROM itsm.sla"
 
         cursor.execute(query)
@@ -463,15 +447,17 @@ def extract_sla(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
     except Exception as e:
         print(f"Erro ao conectar: {e}")
 
-@app.timer_trigger(schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
+
+@app.timer_trigger(
+    schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
+)
 def extract_solicitante(myTimer: func.TimerRequest) -> None:
 
     driver = "{ODBC Driver 18 for SQL Server}"
@@ -480,7 +466,7 @@ def extract_solicitante(myTimer: func.TimerRequest) -> None:
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
-    #string de conexao
+    # string de conexao
     connection_string = (
         f"Driver={driver};"
         f"Server=tcp:{host_sql},1433;"
@@ -492,13 +478,13 @@ def extract_solicitante(myTimer: func.TimerRequest) -> None:
         "Connection Timeout=30;"
     )
 
-    #tentativa de conexao
+    # tentativa de conexao
     try:
         conexao = pyodbc.connect(connection_string)
         cursor = conexao.cursor()
 
         logging.info("conectado com sucesso negão")
-        
+
         query = "SELECT * FROM itsm.solicitante"
 
         cursor.execute(query)
@@ -506,7 +492,7 @@ def extract_solicitante(myTimer: func.TimerRequest) -> None:
         retorno = cursor.fetchall()
 
         logging.info(retorno)
-        
+
         cursor.close()
         conexao.close()
         logging.info("conexao fechada")
