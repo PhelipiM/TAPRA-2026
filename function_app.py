@@ -1,9 +1,9 @@
 import logging
 import os
-import azure.functions as func
-import requests
 
+import azure.functions as func
 import pyodbc
+import requests
 
 app = func.FunctionApp()
 
