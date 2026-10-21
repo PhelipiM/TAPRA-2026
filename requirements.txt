@@ -5,3 +5,6 @@
 azure-functions
 requests
 pyodbc
+azure-storage-file-datalake
+ruff
+logging
