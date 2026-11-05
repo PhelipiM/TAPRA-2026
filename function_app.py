@@ -71,41 +71,45 @@ def timer_trigger_http(myTimer: func.TimerRequest) -> None:
     schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
 )
 def extract_chamado(myTimer: func.TimerRequest) -> None:
+     logging.info('tabela chamado')
 
-    driver = "{ODBC Driver 18 for SQL Server}"
+    
     host_sql = os.getenv("HOST")
     database_sql = os.getenv("DATABASE")
     user_sql = os.getenv("USER")
     pass_sql = os.getenv("PASSWORD")
 
+    logging.info(f'servidor={host_sql}, banco de dados={database_sql}, usuario={user_sql}, senha={pass_sql} ')
+
     # string de conexao
-    connection_string = (
-        f"Driver={driver};"
-        f"Server=tcp:{host_sql},1433;"
-        f"Database={database_sql};"
-        f"Uid={user_sql};"
-        f"Pwd={pass_sql};"
+     conn_str = (
+        "DRIVER={ODBC Driver 18 for SQL Server};"
+        f"SERVER={host_sql};"
+        f"DATABASE={database_sql};"
+        f"UID={user_sql};"
+        f"PWD={pass_sql};"
         "Encrypt=yes;"
         "TrustServerCertificate=no;"
         "Connection Timeout=30;"
     )
 
-    # tentativa de conexao
-    try:
-        conexao = pyodbc.connect(connection_string)
-        cursor = conexao.cursor()
 
-        query = "SELECT * FROM itsm.chamado"
+     try:
+        # Estabelece a conexão com o banco de dados usando pyodbc
+        with pyodbc.connect(conn_str) as conn:
+            # Cria um cursor para executar a consulta
+            cursor = conn.cursor()
+            
+            query = "select * from itsm.chamado"
 
-        cursor.execute(query)
+            # Executa a consulta SQL
+            cursor.execute(query)
 
-        retorno = cursor.fetchall()
+            # Busca todos os resultados da consulta
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
 
-        logging.info(retorno)
-
-        columns = [col[0] for col in cursor.description]
-
-        logging.info(f'{len(rows)} linhas lidas de itsm.chamado')
+            logging.info(f'{len(rows)} linhas lidas de itsm.chamado')
 
         # Cria um buffer de memória para armazenar os dados CSV
         buffer = io.StringIO()
@@ -131,13 +135,10 @@ def extract_chamado(myTimer: func.TimerRequest) -> None:
         file_client.upload_data(buffer.getvalue().encode("utf-8"), overwrite=True)
 
         logging.info(f'Arquivo gravado em bronze/{file_path}')
-    
-    
-        cursor.close()
-        conexao.close()
-        logging.info("conexao fechada")
+
     except Exception as e:
-        print(f"Erro ao conectar: {e}")
+        logging.error(f"Erro ao ler itsm.chamado: {str(e)}")
+        raise
 
 
 @app.timer_trigger(
