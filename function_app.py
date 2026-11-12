@@ -57,6 +57,197 @@ def _upload_cursor_results(cursor, table_name: str, entity_name: str) -> int:
     return len(rows)
 
 
+# A carga é separada das funções extract_*: elas continuam exportando do banco
+# configurado em DATABASE para o Data Lake. Esta função carrega para DATABASE_SLK.
+_INGEST_TABLES = {
+    "analistas": "analista",
+    "categorias": "categoria",
+    "chamados": "chamado",
+    "chamados_sla": "chamado_sla",
+    "chamados_status_historico": "chamado_status_historico",
+    "clientes_organizacao": "cliente_organizacao",
+    "csat_avaliacoes": "csat_avaliacao",
+    "filas": "fila",
+    "slas": "sla",
+    "solicitantes": "solicitante",
+}
+
+
+def _ingest_sql_connection():
+    host_sql = os.getenv("HOST")
+    database_sql = os.getenv("DATABASE_SLK", "").strip()
+    if len(database_sql) >= 2 and database_sql[0] == database_sql[-1] and database_sql[0] in ("'", '"'):
+        database_sql = database_sql[1:-1].strip()
+    user_sql = os.getenv("USER")
+    password_sql = os.getenv("PASSWORD")
+    missing = [
+        name for name, value in (
+            ("HOST", host_sql), ("DATABASE_SLK", database_sql),
+            ("USER", user_sql), ("PASSWORD", password_sql),
+        ) if not value
+    ]
+    if missing:
+        raise ValueError(f"Variáveis de ambiente ausentes: {', '.join(missing)}")
+    if ";" in database_sql:
+        raise ValueError(
+            "DATABASE_SLK deve conter somente o nome do banco (por exemplo, db-tapra), "
+            "sem ponto e vírgula nem connection string."
+        )
+    logging.info("Banco SQL de destino da ingestão: %s", database_sql)
+
+    connection_string = (
+        "DRIVER={ODBC Driver 18 for SQL Server};"
+        f"SERVER=tcp:{host_sql},1433;"
+        f"DATABASE={database_sql};"
+        f"UID={user_sql};"
+        f"PWD={password_sql};"
+        "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+    )
+    return pyodbc.connect(connection_string)
+
+
+def _insert_json_records(cursor, table_name: str, records: list) -> int:
+    if not isinstance(records, list):
+        raise ValueError("O JSON deve conter uma lista de objetos.")
+    if not records:
+        return 0
+    if any(not isinstance(record, dict) for record in records):
+        raise ValueError("Cada item do JSON deve ser um objeto.")
+
+    columns = list(records[0].keys())
+    if not columns or any(
+        not isinstance(column, str)
+        or not column.replace("_", "a").isalnum()
+        or not column[0].isalpha()
+        for column in columns
+    ):
+        raise ValueError("O JSON contém nome de coluna inválido.")
+    if any(set(record.keys()) != set(columns) for record in records):
+        raise ValueError("Os objetos do JSON não têm as mesmas colunas.")
+
+    quoted_columns = ", ".join(f"[{column}]" for column in columns)
+    placeholders = ", ".join("?" for _ in columns)
+    statement = (
+        f"INSERT INTO [itsm].[{table_name}] ({quoted_columns}) "
+        f"VALUES ({placeholders})"
+    )
+
+    def sql_value(value):
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False)
+        return value
+
+    cursor.execute(
+        """
+        SELECT c.name
+        FROM sys.columns AS c
+        INNER JOIN sys.tables AS t ON t.object_id = c.object_id
+        INNER JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+        WHERE s.name = ? AND t.name = ? AND c.is_identity = 1
+        """,
+        "itsm",
+        table_name,
+    )
+    identity_column = cursor.fetchone()
+    copy_identity = identity_column is not None and identity_column[0] in columns
+
+    if copy_identity:
+        cursor.execute(f"SET IDENTITY_INSERT [itsm].[{table_name}] ON")
+    try:
+        # fast_executemany infere os tipos pela primeira linha e pode converter
+        # incorretamente strings ISO/nulos exportados para colunas SQL tipadas.
+        # A carga inicial prioriza conversão correta; executemany padrão envia os
+        # parâmetros usando a conversão normal do driver ODBC.
+        cursor.fast_executemany = False
+        cursor.executemany(
+            statement,
+            [tuple(sql_value(record[column]) for column in columns) for record in records],
+        )
+    finally:
+        if copy_identity:
+            cursor.execute(f"SET IDENTITY_INSERT [itsm].[{table_name}] OFF")
+    return len(records)
+
+
+@app.route(route="ingest-datalake", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+def ingest_datalake_jsons(req: func.HttpRequest) -> func.HttpResponse:
+    """Carga manual: importa o snapshot JSON mais recente de cada tabela para DATABASE_SLK."""
+    datalake_connection = os.getenv("DATALAKE_CONNECTION_STRING")
+    if not datalake_connection:
+        raise ValueError("A configuração DATALAKE_CONNECTION_STRING não foi definida.")
+
+    datalake = DataLakeServiceClient.from_connection_string(datalake_connection)
+    loaded_files = 0
+    loaded_rows = 0
+    failures = []
+    try:
+        filesystem = datalake.get_file_system_client("bronze")
+        # Os arquivos são snapshots completos (SELECT *), então usa só o mais
+        # recente de cada entidade e arquiva os snapshots antigos para evitar
+        # inserir as mesmas linhas repetidamente.
+        latest_by_entity = {}
+        for item in filesystem.get_paths():
+            path = item.name
+            if not path.lower().endswith(".json") or "/_processados/" in f"/{path}/":
+                continue
+            entity = next((part for part in path.split("/") if part in _INGEST_TABLES), None)
+            if not entity:
+                continue
+            previous = latest_by_entity.get(entity)
+            modified = item.last_modified
+            if previous is None or modified > previous[0]:
+                latest_by_entity[entity] = (modified, path)
+
+        for entity, (_, latest_path) in latest_by_entity.items():
+            table_name = _INGEST_TABLES[entity]
+            entity_files = [
+                item.name for item in filesystem.get_paths()
+                if item.name.lower().endswith(".json")
+                and entity in item.name.split("/")
+                and "/_processados/" not in f"/{item.name}/"
+            ]
+            for path in entity_files:
+                try:
+                    file_client = filesystem.get_file_client(path)
+                    if path == latest_path:
+                        payload = file_client.download_file().readall()
+                        records = json.loads(payload.decode("utf-8-sig"))
+                        with _ingest_sql_connection() as connection:
+                            cursor = connection.cursor()
+                            row_count = _insert_json_records(cursor, table_name, records)
+                            cursor.close()
+                            connection.commit()
+                        loaded_files += 1
+                        loaded_rows += row_count
+                        logging.info("Importado %s: %s linhas em itsm.%s", path, row_count, table_name)
+
+                    directory = path.rsplit("/", 1)[0] if "/" in path else ""
+                    processed_dir = f"{directory}/_processados" if directory else "_processados"
+                    try:
+                        filesystem.get_directory_client(processed_dir).create_directory()
+                    except Exception:
+                        pass
+                    destination = f"{processed_dir}/{path.rsplit('/', 1)[-1]}"
+                    file_client.rename_file(f"bronze/{destination}")
+                except Exception as exc:
+                    failures.append({"arquivo": path, "erro": f"{type(exc).__name__}: {exc}"})
+                    logging.exception("Falha ao importar/arquivar %s", path)
+
+        summary = {
+            "arquivos_importados": loaded_files,
+            "linhas_importadas": loaded_rows,
+            "falhas": failures,
+        }
+        logging.info("Ingestão concluída: %s", summary)
+        return func.HttpResponse(
+            json.dumps(summary, ensure_ascii=False),
+            status_code=500 if failures else 200,
+            mimetype="application/json",
+        )
+    finally:
+        datalake.close()
+
+
 @app.timer_trigger(
     schedule="0 * * * * *", arg_name="myTimer", run_on_startup=False, use_monitor=False
 )
