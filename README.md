@@ -41,3 +41,18 @@
 ### 8. Chamados por Status
 * **Tabela de origem:** `chamado` (`ds_status_chamado`)
 * **Descrição:** Panorama atual dos registros divididos por status (ex: abertos, em progresso, resolvidos).
+
+## Sincronização diária para o banco destino
+
+A função `sync_bronze_to_target_db` roda diariamente às 02:00 UTC. Ela lê o snapshot JSON mais recente de cada entidade em `bronze/itsm`, aplica os registros nas tabelas correspondentes do schema `itsm` e usa as chaves primárias do destino para inserir ou atualizar sem duplicar registros. As tabelas são processadas na ordem definida pelas chaves estrangeiras do banco destino.
+
+No Azure Portal, abra a Function App correta e acesse **Settings > Environment variables > App settings**. Adicione estas configurações para o banco destino; elas são independentes das variáveis de origem `HOST`, `DATABASE`, `USER` e `PASSWORD`:
+
+| Nome | Valor |
+| --- | --- |
+| `TARGET_SQL_HOST` | Host do servidor SQL destino, sem `tcp:` e sem a porta |
+| `TARGET_SQL_DATABASE` | Nome do banco de dados destino |
+| `TARGET_SQL_USER` | Usuário SQL autorizado no banco destino |
+| `TARGET_SQL_PASSWORD` | Senha desse usuário |
+
+Salve as configurações para reiniciar a Function App. Não coloque credenciais no código nem no repositório. O banco destino deve ter as tabelas no schema `itsm`, com chave primária, e as relações entre elas devem permitir a ordenação por chaves estrangeiras usada pela carga.
