@@ -309,16 +309,11 @@ def _upsert_snapshot(cursor, table_name: str, table_schema: dict, records: list[
     return written
 
 
-@app.timer_trigger(
-    schedule="0 0 2 * * *", arg_name="myTimer", run_on_startup=False, use_monitor=True
-)
-def sync_bronze_to_target_db(myTimer: func.TimerRequest) -> None:
-    if myTimer.past_due:
-        logging.warning("A sincronização diária está atrasada.")
-
+def _sync_bronze_to_target_db() -> dict[str, int]:
     snapshots = _read_latest_bronze_snapshots()
     connection = pyodbc.connect(_destination_connection_string())
     cursor = connection.cursor()
+    processed = {}
     try:
         ordered_tables, destination_schema = _destination_table_order(
             cursor, list(snapshots)
@@ -332,6 +327,7 @@ def sync_bronze_to_target_db(myTimer: func.TimerRequest) -> None:
                     snapshots[table_name],
                 )
                 connection.commit()
+                processed[table_name] = count
                 logging.info(
                     "Sincronizada itsm.%s: %s registros processados",
                     table_name,
@@ -344,6 +340,44 @@ def sync_bronze_to_target_db(myTimer: func.TimerRequest) -> None:
     finally:
         cursor.close()
         connection.close()
+    return processed
+
+
+@app.route(
+    route="sync-bronze-to-target-db",
+    methods=["POST"],
+    auth_level=func.AuthLevel.FUNCTION,
+)
+def sync_bronze_to_target_db(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("Iniciando sincronização sob demanda.")
+    try:
+        processed = _sync_bronze_to_target_db()
+        return func.HttpResponse(
+            json.dumps({"status": "success", "tables": processed}),
+            status_code=200,
+            mimetype="application/json",
+        )
+    except Exception:
+        logging.exception("Falha na sincronização sob demanda.")
+        return func.HttpResponse(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "message": "A sincronização falhou. Consulte os logs da Function App.",
+                }
+            ),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+
+@app.timer_trigger(
+    schedule="0 0 2 * * *", arg_name="myTimer", run_on_startup=False, use_monitor=True
+)
+def sync_bronze_to_target_db_daily(myTimer: func.TimerRequest) -> None:
+    if myTimer.past_due:
+        logging.warning("A sincronização diária está atrasada.")
+    _sync_bronze_to_target_db()
 
 
 @app.timer_trigger(
