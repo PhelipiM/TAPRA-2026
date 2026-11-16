@@ -144,48 +144,6 @@ Se os logs apresentarem erro SQL `40615` ou disserem que o IP do cliente não es
 
 Erros diferentes indicam etapas diferentes: `40615` é firewall; `18456`/“login failed” indica autenticação ou credencial; erro de tabela, coluna ou chave estrangeira indica estrutura ou permissões do banco.
 
-### 7. Configurações do runtime do Azure Functions
-
-Além das configurações próprias listadas acima, a Function App precisa das configurações de runtime usadas pelo Azure Functions. Confira sem substituir valores gerenciados pelo Portal:
-
-| Configuração | Uso |
-| --- | --- |
-| `FUNCTIONS_WORKER_RUNTIME` | Deve ser `python`. |
-| `FUNCTIONS_EXTENSION_VERSION` | Para Functions v4, normalmente `~4`. |
-| `AzureWebJobsStorage` | Armazenamento interno do runtime e do monitoramento de timers. Deve permanecer configurado. Não confundir com `DATALAKE_CONNECTION_STRING`: são recursos/propósitos distintos. |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Telemetria e logs; normalmente criada/integrada pelo Portal. |
-| `DEPLOYMENT_STORAGE_CONNECTION_STRING` | Armazenamento de implantação quando usado pelo plano Flex Consumption. Não é a connection string do Data Lake. |
-
-Não apague nem substitua configurações gerenciadas pelo Azure. A configuração do Timer depende do runtime e do armazenamento interno estarem funcionando.
-
-### 8. Fazer a carga inicial e testar manualmente
-
-Primeiro, confirme que a versão atual do código foi **implantada** na Function App e que os snapshots existem no Data Lake. No Portal:
-
-1. Abra a Function App do projeto, acesse **Funções** e selecione `sync_bronze_to_target_db`.
-2. Em **Chaves de função**, copie uma function key; trate-a como segredo. Também é possível usar a opção de copiar **Function URL**, que já inclui a chave.
-3. Faça uma requisição **POST** para `https://<nome-da-function-app>.azurewebsites.net/api/sync-bronze-to-target-db`. Não precisa de body. Envie a chave no cabeçalho `x-functions-key`.
-
-Exemplo em PowerShell, substituindo os placeholders sem salvar a chave no repositório:
-
-```powershell
-$uri = "https://<nome-da-function-app>.azurewebsites.net/api/sync-bronze-to-target-db"
-$headers = @{ "x-functions-key" = "<function-key>" }
-Invoke-RestMethod -Method Post -Uri $uri -Headers $headers
-```
-
-O endpoint executa a mesma carga de todas as entidades que o Timer diário. A resposta de sucesso contém `status: success` e a contagem processada por tabela. Repetir a carga é seguro para duplicações, pois a chave primária direciona a inserção ou atualização.
-
-### 9. Verificar resultado e diagnosticar falhas
-
-No Portal, abra a Function App do projeto, acesse **Funções > sync_bronze_to_target_db > Invocações e muito mais** ou **Monitoramento > Logs**. Confirme a execução e procure mensagens como:
-
-- `Snapshot selecionado para itsm.analista ... (N linhas)`: quantidade carregada do snapshot do Data Lake.
-- `Sincronizada itsm.analista: N registros processados`: linhas processadas no destino.
-- `Falha ao sincronizar ...` ou `Falha na sincronização sob demanda`: leia a exceção imediatamente anterior no log.
-
-Se o snapshot indicar `0 linhas`, confira a extração de origem `extract_analista` e a tabela `itsm.analista` no banco de origem. Se o log indicar linhas processadas, consulte o banco de destino configurado em `TARGET_SQL_DATABASE`, schema `itsm` e tabela correspondente. O editor SQL do Portal deve estar conectado ao banco de destino correto; atualize os resultados após a execução.
-
-### 10. Carga diária
+### 7. Carga diária
 
 Após a implantação, `sync_bronze_to_target_db_daily` executa automaticamente todos os dias às 02:00 UTC (23:00 em Brasília). Ela usa os snapshots mais recentes e faz upsert das tabelas. O gatilho HTTP permanece disponível para cargas iniciais e testes manuais. Alterar apenas as variáveis no Portal não implanta código novo; para ativar mudanças no timer, implante a versão atualizada da Function App.
